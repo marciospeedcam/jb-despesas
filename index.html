@@ -96,6 +96,7 @@
   .actions .btn{flex:1}
   .err{color:var(--red);font-size:13px;margin-top:8px;min-height:1em}
   .banner{background:var(--amber-soft);color:var(--amber);font-size:13px;padding:10px 12px;border-radius:12px;margin-bottom:10px;display:none}
+  .btn.share{width:100%;margin-top:18px;background:#1a1a1a;color:var(--gold2);border:1px solid rgba(212,175,55,.5)}
   .pixrow{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
   .pixrow .pn{display:flex;align-items:center;gap:6px;font-weight:600;font-size:14px}
   .pixrow .pk{font-size:18px;font-weight:700;color:var(--gold2);margin-top:4px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
@@ -139,6 +140,8 @@
   </div>
   <div class="sum" id="sum"></div>
   <div class="list" id="list"></div>
+
+  <button class="btn share" id="btnShare">📤 Compartilhar app</button>
 
   <h2>Chaves Pix</h2>
   <div class="list" id="pixList">
@@ -471,6 +474,14 @@
     const ok=await copyText(b.dataset.pix);
     if(ok){ const old=b.textContent; b.textContent="Copiado ✓"; setTimeout(()=>b.textContent=old,1800); toast("Chave Pix copiada"); }
     else toast("Segure o número para copiar");
+  });
+
+  // ---------- compartilhar app ----------
+  const APP_URL="https://marciospeedcam.github.io/jb-despesas/";
+  $("#btnShare").addEventListener("click",async()=>{
+    const data={title:"JB Despesas",text:"App de despesas da JB (Márcio & Mateus). Abra no Safari e toque em Compartilhar > Adicionar à Tela de Início:",url:APP_URL};
+    if(navigator.share){ try{ await navigator.share(data); return; }catch(e){ if(e&&e.name==="AbortError") return; } }
+    const ok=await copyText(APP_URL); toast(ok?"Link copiado: cole no WhatsApp":APP_URL);
   });
 
   // ---------- filtros ----------
