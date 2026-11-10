@@ -96,6 +96,12 @@
   .actions .btn{flex:1}
   .err{color:var(--red);font-size:13px;margin-top:8px;min-height:1em}
   .banner{background:var(--amber-soft);color:var(--amber);font-size:13px;padding:10px 12px;border-radius:12px;margin-bottom:10px;display:none}
+  .pixrow{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .pixrow .pn{display:flex;align-items:center;gap:6px;font-weight:600;font-size:14px}
+  .pixrow .pk{font-size:18px;font-weight:700;color:var(--gold2);margin-top:4px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .btn.copy{background:#262626;color:var(--gold2);border:1px solid rgba(212,175,55,.5);padding:10px 14px;font-size:14px;flex:none}
+  .pixpay{margin-top:12px;background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.35);border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .pixpay .l{font-size:12px;color:var(--muted)} .pixpay .k{font-size:17px;font-weight:700;color:var(--gold2)}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom));background:#2a2a2a;color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
   .toast.show{opacity:1}
 </style>
@@ -114,6 +120,7 @@
       <div class="lbl">Saldo entre vocês</div>
       <div class="big" id="saldoBig">R$ 0,00</div>
       <div class="txt" id="saldoTxt">Carregando…</div>
+      <div class="pixpay" id="pixPay" style="display:none"></div>
       <button class="btn light" id="btnReemb" style="display:none">Registrar reembolso</button>
     </div>
     <div class="grid2">
@@ -132,6 +139,12 @@
   </div>
   <div class="sum" id="sum"></div>
   <div class="list" id="list"></div>
+
+  <h2>Chaves Pix</h2>
+  <div class="list" id="pixList">
+    <div class="pixrow"><div><div class="pn"><span class="av m">M</span>Márcio</div><div class="pk">11990174551</div></div><button class="btn copy" data-pix="11990174551">Copiar</button></div>
+    <div class="pixrow"><div><div class="pn"><span class="av t">M</span>Mateus</div><div class="pk">32406965848</div></div><button class="btn copy" data-pix="32406965848">Copiar</button></div>
+  </div>
 
   <h2 id="hReemb" style="display:none">Reembolsos</h2>
   <div class="list" id="reembList"></div>
@@ -220,6 +233,7 @@
   if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
   const NAMES = {marcio:"Márcio", matheus:"Mateus"};
   const OTHER = {marcio:"matheus", matheus:"marcio"};
+  const PIX = {marcio:"11990174551", matheus:"32406965848"};
   const $ = s => document.querySelector(s);
   const fmt = c => (c<0?"-":"") + "R$ " + (Math.abs(c)/100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const esc = s => String(s==null?"":s).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
@@ -271,12 +285,14 @@
     const ready = loadedExp && loadedReemb;
     if(!ready){ $("#saldoTxt").textContent="Carregando…"; }
     else if(Math.abs(net)<1){
-      $("#saldoBig").textContent="R$ 0,00"; $("#saldoTxt").textContent="Tudo acertado entre vocês ✓"; $("#btnReemb").style.display="none";
+      $("#saldoBig").textContent="R$ 0,00"; $("#saldoTxt").textContent="Tudo acertado entre vocês ✓"; $("#btnReemb").style.display="none"; $("#pixPay").style.display="none";
     } else {
       const debtor = net>0?"matheus":"marcio", cred=OTHER[debtor];
       $("#saldoBig").textContent=fmt(Math.abs(net));
       $("#saldoTxt").textContent=NAMES[debtor]+" deve ao "+NAMES[cred];
       $("#btnReemb").style.display=canWrite?"inline-block":"none";
+      const pp=$("#pixPay"); pp.style.display="flex";
+      pp.innerHTML=`<div><div class="l">Pix do ${NAMES[cred]} para pagar ${fmt(Math.abs(net))}</div><div class="k">${PIX[cred]}</div></div><button class="btn copy" data-pix="${PIX[cred]}">Copiar</button>`;
     }
 
     // lista despesas
@@ -443,6 +459,18 @@
     try{ await db.collection("reembolsos").add({from:rFrom,value,date,createdAt:Date.now()}); toast("Reembolso registrado"); close(); }
     catch(e){ handleWriteErr(e,"#errReemb"); }
     finally{ saving=false; }
+  });
+
+  // ---------- copiar pix ----------
+  async function copyText(t){
+    try{ await navigator.clipboard.writeText(t); return true; }catch(e){}
+    try{ const ta=document.createElement("textarea"); ta.value=t; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,99); const ok=document.execCommand("copy"); ta.remove(); return ok; }catch(e){ return false; }
+  }
+  document.addEventListener("click",async ev=>{
+    const b=ev.target.closest("[data-pix]"); if(!b) return;
+    const ok=await copyText(b.dataset.pix);
+    if(ok){ const old=b.textContent; b.textContent="Copiado ✓"; setTimeout(()=>b.textContent=old,1800); toast("Chave Pix copiada"); }
+    else toast("Segure o número para copiar");
   });
 
   // ---------- filtros ----------
