@@ -1,5 +1,5 @@
 // JB Despesas - service worker: guarda a tela do app para abrir rápido
-const CACHE = 'jbd-v3';
+const CACHE = 'jbd-v4';
 const ARQS = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'icon-180.png', 'favicon-32.png'];
 
 self.addEventListener('install', e => {

@@ -509,12 +509,12 @@
     const timer=setTimeout(()=>{ banner("Os dados ainda não chegaram. Confira a internet."); setStatus(false,"sem sinal"); },12000);
     const ok=()=>{ clearTimeout(timer); banner(""); setStatus(true,"ao vivo"); };
     const fail=(err)=>{ clearTimeout(timer); loadedExp=loadedReemb=true; setStatus(false,"erro"); banner(err&&err.code==="permission-denied"?"O banco de dados recusou o acesso às despesas. Avise o Claude para liberar.":"Conexão perdida. Feche e abra o app de novo."); render(); };
-    db.collection("despesas").onSnapshot(snap=>{
+    db.collection("despesas").onSnapshot({includeMetadataChanges:true},snap=>{
       expenses=snap.docs.filter(d=>d.exists).map(clean); loadedExp=true;
       if(!snap.metadata.fromCache) ok();
       render();
     },fail);
-    db.collection("reembolsos").onSnapshot(snap=>{
+    db.collection("reembolsos").onSnapshot({includeMetadataChanges:true},snap=>{
       reembs=snap.docs.filter(d=>d.exists).map(cleanR); loadedReemb=true; render();
     },fail);
   }
