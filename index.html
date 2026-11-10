@@ -112,6 +112,20 @@
   .pixpay .l{font-size:12px;color:var(--muted)} .pixpay .k{font-size:17px;font-weight:700;color:var(--gold2)}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom));background:#2a2a2a;color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
   .toast.show{opacity:1}
+  .pcard .r{font-size:11px;color:var(--gold2);margin-top:2px}
+  .anx{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0e0e0e;border:1.5px dashed #3a3a3a;border-radius:12px;padding:10px 12px}
+  .anx.tem{border-style:solid;border-color:rgba(212,175,55,.5)}
+  .anx .ai{font-size:14px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .anx.tem .ai{color:var(--ink)}
+  .anx .ab{display:flex;gap:6px;flex:none}
+  .anx .ab .btn{padding:8px 12px;font-size:13px}
+  .chip.anx-chip{background:var(--amber-soft);color:var(--gold2);cursor:pointer;border:0;font:500 12px -apple-system,BlinkMacSystemFont,Roboto,Arial,sans-serif}
+  .chip.falta{background:#262626;color:#8a8a8a}
+  .viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:30;display:none;flex-direction:column}
+  .viewer.open{display:flex}
+  .viewer .vt{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;color:#fff;font-weight:600}
+  .viewer .vb{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:8px}
+  .viewer img{max-width:100%;height:auto;border-radius:8px}
 </style>
 </head>
 <body>
@@ -132,8 +146,8 @@
       <button class="btn light" id="btnReemb" style="display:none">Registrar reembolso</button>
     </div>
     <div class="grid2">
-      <div class="pcard"><div class="n"><span class="av m">M</span>Márcio pagou</div><div class="v" id="pagoM">R$ 0,00</div><div class="s" id="parteM">parte dele: R$ 0,00</div></div>
-      <div class="pcard"><div class="n"><span class="av t">M</span>Mateus pagou</div><div class="v" id="pagoT">R$ 0,00</div><div class="s" id="parteT">parte dele: R$ 0,00</div></div>
+      <div class="pcard"><div class="n"><span class="av m">M</span>Márcio pagou</div><div class="v" id="pagoM">R$ 0,00</div><div class="s" id="parteM">parte dele: R$ 0,00</div><div class="r" id="reembM"></div></div>
+      <div class="pcard"><div class="n"><span class="av t">M</span>Mateus pagou</div><div class="v" id="pagoT">R$ 0,00</div><div class="s" id="parteT">parte dele: R$ 0,00</div><div class="r" id="reembT"></div></div>
     </div>
   </div>
 </header>
@@ -182,6 +196,11 @@
     <label class="f" for="fDue">Data de vencimento (opcional)</label>
     <input type="date" id="fDue">
     <div class="toggle" id="togPaid"><span>Já foi paga</span><span class="check" id="chkPaid"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span></div>
+    <label class="f">Nota da despesa (foto ou PDF)</label>
+    <div class="anx" id="anxNota"></div>
+    <label class="f">Comprovante de pagamento (foto ou PDF)</label>
+    <div class="anx" id="anxComp"></div>
+    <input type="file" id="fileIn" accept="image/*,application/pdf" style="display:none">
     <div class="split-prev" id="splitPrev">Cada um paga <b>R$ 0,00</b></div>
     <div class="err" id="errExp"></div>
     <div class="actions">
@@ -237,6 +256,11 @@
   </div>
 </div>
 
+<div class="viewer" id="viewer">
+  <div class="vt"><span id="vTitle">Anexo</span><div style="display:flex;gap:6px"><button class="btn copy" id="vOpen">Abrir</button><button class="btn copy" id="vClose">Fechar</button></div></div>
+  <div class="vb" id="vBody"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -253,7 +277,28 @@
     messagingSenderId: "815638515657",
     appId: "1:815638515657:web:7679d52ade0d5576752218"
   };
-  if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+    function recarregar(){ try{ const t=+(sessionStorage.getItem('jbd_rl')||0); if(Date.now()-t<30000) return; sessionStorage.setItem('jbd_rl',String(Date.now())); }catch(e){ return; } location.reload(); }
+  // Versão nova do app: busca sem cache e recarrega sozinho quando chegar atualização
+  let swReg=null;
+  if('serviceWorker' in navigator){
+    const tinhaControle=!!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ swReg=r; r.update().catch(()=>{}); }).catch(()=>{});
+    let recarregou=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(tinhaControle && !recarregou && !openSheet){ recarregou=true; recarregar(); } });
+  }
+  // Ao voltar para o app depois de um tempo, recarrega tudo (dados e versão) para nunca mostrar coisa velha
+  let escondidoEm=0;
+  function voltou(){
+    if(document.hidden) return;
+    if(swReg) swReg.update().catch(()=>{});
+    const longe = escondidoEm && Date.now()-escondidoEm>15000; escondidoEm=0;
+    if(longe && !openSheet && !$("#viewer").classList.contains("open")){ recarregar(); return; }
+    try{ if(db) db.disableNetwork().then(()=>db.enableNetwork()).catch(()=>{}); }catch(e){}
+  }
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) escondidoEm=Date.now(); else voltou(); });
+  window.addEventListener('pageshow',ev=>{ if(ev.persisted) recarregar(); });
+  window.addEventListener('focus',voltou);
+  window.addEventListener('online',()=>{ try{ if(db) db.enableNetwork().catch(()=>{}); }catch(e){} });
   const NAMES = {marcio:"Márcio", matheus:"Mateus"};
   const OTHER = {marcio:"matheus", matheus:"marcio"};
   const PIX = {marcio:"11990174551", matheus:"32406965848"};
@@ -291,18 +336,33 @@
       const half=v/2;
       net += e.payer==="marcio" ? half : -half;
     }
+    const reembPaid={marcio:0,matheus:0};
     for(const r of reembs){
       const v=r.value|0;
       net += r.from==="matheus" ? -v : v;
+      reembPaid[r.from]+=v;
     }
-    return {paidBy,total,net:Math.round(net)};
+    // Quanto cada um realmente pôs do bolso: despesas que pagou + reembolsos que deu − reembolsos que recebeu
+    const contrib={
+      marcio: paidBy.marcio + reembPaid.marcio - reembPaid.matheus,
+      matheus: paidBy.matheus + reembPaid.matheus - reembPaid.marcio
+    };
+    return {paidBy,total,net:Math.round(net),reembPaid,contrib};
+  }
+  function reembLine(p,reembPaid){
+    const deu=reembPaid[p], recebeu=reembPaid[OTHER[p]], parts=[];
+    if(deu>0) parts.push("inclui "+fmt(deu)+" de reembolso");
+    if(recebeu>0) parts.push("já descontado "+fmt(recebeu)+" recebido");
+    return parts.join(" · ");
   }
 
   // ---------- render ----------
   function render(){
-    const {paidBy,total,net} = compute();
-    $("#pagoM").textContent=fmt(paidBy.marcio);
-    $("#pagoT").textContent=fmt(paidBy.matheus);
+    const {total,net,reembPaid,contrib} = compute();
+    $("#pagoM").textContent=fmt(contrib.marcio);
+    $("#pagoT").textContent=fmt(contrib.matheus);
+    $("#reembM").textContent=reembLine("marcio",reembPaid);
+    $("#reembT").textContent=reembLine("matheus",reembPaid);
     $("#parteM").textContent="parte dele: "+fmt(Math.round(total/2));
     $("#parteT").textContent="parte dele: "+fmt(Math.round(total/2));
     const ready = loadedExp && loadedReemb;
@@ -354,6 +414,8 @@
               <span class="chip ${pc}">${e.paid?"Pago por":"Paga"} ${NAMES[e.payer]}</span>
               <span class="chip">${fmt(Math.round((e.value|0)/2))} cada</span>
               ${dueChip}
+              ${e.temNota?'<button class="chip anx-chip" data-act="ver" data-tipo="nota">📄 Nota</button>':""}
+              ${e.temComp?'<button class="chip anx-chip" data-act="ver" data-tipo="comp">🧾 Comprovante</button>':(e.paid?'<span class="chip falta">sem comprovante</span>':"")}
             </div>
           </div>
         </div>`;
@@ -398,6 +460,9 @@
     fPayer = e?e.payer:"marcio"; fPaid = e?!!e.paid:false;
     setSeg("#segPayer",fPayer); $("#chkPaid").classList.toggle("on",fPaid);
     $("#btnDel").style.display = e?"inline-block":"none";
+    anx.nota = {state: e&&e.temNota?"existing":"none"};
+    anx.comp = {state: e&&e.temComp?"existing":"none"};
+    renderAnx("nota"); renderAnx("comp");
     $("#errExp").textContent=""; updPrev(); open("#sheetExp");
     if(!e) setTimeout(()=>$("#fName").focus(),250);
   }
@@ -414,18 +479,29 @@
     if(!isFinite(value)||value<=0){ $("#errExp").textContent="Coloque um valor válido."; return; }
     if(!db){ $("#errExp").textContent="Sem conexão com o banco de dados."; return; }
     saving=true; $("#btnSave").disabled=true;
+    const temAnexoNovo = anx.nota.state==="new" || anx.comp.state==="new";
+    if(temAnexoNovo) $("#btnSave").textContent="Enviando anexo…";
     try{
+      const id = editId || db.collection("despesas").doc().id;
+      // Primeiro os anexos, depois a despesa (assim o botão do anexo só aparece quando ele já está salvo)
+      for(const tipo of ["nota","comp"]){
+        const a=anx[tipo], ref=db.collection("anexos").doc(id+"_"+tipo);
+        if(a.state==="new") await ref.set({despesaId:id,tipo,nome:a.file.name,mime:a.file.mime,data:a.file.data,size:a.file.size,createdAt:Date.now()});
+        else if(a.state==="remove") await ref.delete();
+      }
+      const temNota = anx.nota.state==="new"||anx.nota.state==="existing";
+      const temComp = anx.comp.state==="new"||anx.comp.state==="existing";
       if(editId){
         const prev=expenses.find(x=>x.id===editId)||{};
-        await db.collection("despesas").doc(editId).set({name,desc,value,payer:fPayer,due,paid:fPaid,paidAt:fPaid?(prev.paidAt||today()):"",createdAt:prev.createdAt||Date.now(),updatedAt:Date.now()});
+        await db.collection("despesas").doc(editId).set({name,desc,value,payer:fPayer,due,paid:fPaid,paidAt:fPaid?(prev.paidAt||today()):"",createdAt:prev.createdAt||Date.now(),updatedAt:Date.now(),temNota,temComp});
         toast("Despesa atualizada");
       } else {
-        await db.collection("despesas").add({name,desc,value,payer:fPayer,due,paid:fPaid,paidAt:fPaid?today():"",createdAt:Date.now(),updatedAt:Date.now()});
+        await db.collection("despesas").doc(id).set({name,desc,value,payer:fPayer,due,paid:fPaid,paidAt:fPaid?today():"",createdAt:Date.now(),updatedAt:Date.now(),temNota,temComp});
         toast("Despesa lançada");
       }
       close();
     }catch(e){ handleWriteErr(e,"#errExp"); }
-    finally{ saving=false; $("#btnSave").disabled=false; }
+    finally{ saving=false; $("#btnSave").disabled=false; $("#btnSave").textContent="Salvar"; }
   });
 
   // ---------- toggle pago / editar ----------
@@ -440,11 +516,98 @@
       try{
         const paid=!e.paid;
         await db.collection("despesas").doc(id).update({paid,paidAt:paid?today():"",updatedAt:Date.now()});
-        toast(paid?"Marcada como paga":"Desmarcada");
+        toast(paid?(e.temComp?"Marcada como paga":"Paga ✓ Toque nela para anexar o comprovante"):"Desmarcada");
       }catch(err){ handleWriteErr(err); }
       finally{ busy.delete(id); }
+    } else if(act==="ver"){
+      verAnexoSalvo(id, ev.target.closest("[data-tipo]").dataset.tipo, e.name);
     } else if(act==="edit" && canWrite){ openExp(e); }
   });
+
+  // ---------- anexos (nota e comprovante) ----------
+  const TIPO_NOME={nota:"Nota da despesa", comp:"Comprovante de pagamento"};
+  const anx={nota:{state:"none"}, comp:{state:"none"}};
+  let anxTipo=null;
+  function renderAnx(tipo){
+    const a=anx[tipo], box=$(tipo==="nota"?"#anxNota":"#anxComp");
+    const tem = a.state==="existing"||a.state==="new";
+    box.classList.toggle("tem",tem);
+    const info = a.state==="new" ? "📎 "+esc(a.file.name)+" · "+Math.round(a.file.size/1024)+" KB"
+               : a.state==="existing" ? "📎 Anexado"
+               : "Nenhum arquivo";
+    const bts = tem
+      ? '<button type="button" class="btn copy" data-anx="ver" data-t="'+tipo+'">Ver</button><button type="button" class="btn copy" data-anx="trocar" data-t="'+tipo+'">Trocar</button><button type="button" class="btn ghost" data-anx="tirar" data-t="'+tipo+'">✕</button>'
+      : '<button type="button" class="btn copy" data-anx="add" data-t="'+tipo+'">Anexar</button>';
+    box.innerHTML='<div class="ai">'+info+'</div><div class="ab">'+bts+'</div>';
+  }
+  document.addEventListener("click",ev=>{
+    const b=ev.target.closest("[data-anx]"); if(!b) return;
+    const tipo=b.dataset.t, a=anx[tipo], act=b.dataset.anx;
+    if(act==="add"||act==="trocar"){ anxTipo=tipo; $("#fileIn").value=""; $("#fileIn").click(); }
+    else if(act==="tirar"){ anx[tipo]={state: (a.state==="existing"||(a.state==="new"&&a.tinha))?"remove":"none"}; renderAnx(tipo); }
+    else if(act==="ver"){
+      if(a.state==="new") mostrarAnexo(TIPO_NOME[tipo], a.file.data, a.file.mime);
+      else if(editId) verAnexoSalvo(editId, tipo, $("#fName").value);
+    }
+  });
+  $("#fileIn").addEventListener("change",async()=>{
+    const f=$("#fileIn").files[0]; if(!f||!anxTipo) return;
+    const tipo=anxTipo; $("#errExp").textContent="";
+    const box=$(tipo==="nota"?"#anxNota":"#anxComp"); box.querySelector(".ai").textContent="Preparando arquivo…";
+    try{
+      const file = await prepararArquivo(f);
+      const tinha = anx[tipo].state==="existing" || anx[tipo].state==="remove" || !!anx[tipo].tinha;
+      anx[tipo]={state:"new", file, tinha};
+    }catch(err){ $("#errExp").textContent = err.message || "Não deu para usar esse arquivo."; }
+    renderAnx(tipo);
+  });
+  function lerDataURL(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error("Não deu para ler o arquivo.")); r.readAsDataURL(blob); }); }
+  function carregarImagem(f){
+    return new Promise((res,rej)=>{ const u=URL.createObjectURL(f); const img=new Image(); img.onload=()=>{ URL.revokeObjectURL(u); res(img); }; img.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error("Não deu para abrir essa imagem. Tente uma foto ou print.")); }; img.src=u; });
+  }
+  const LIMITE=700*1024; // cada anexo fica no banco; precisa ser pequeno
+  async function prepararArquivo(f){
+    const nome=(f.name||"arquivo").slice(0,80);
+    if(f.type==="application/pdf" || /\.pdf$/i.test(nome)){
+      if(f.size>650*1024) throw new Error("Esse PDF é grande demais ("+Math.round(f.size/1024)+" KB, o máximo é 650 KB). Tire uma foto ou um print da nota.");
+      return {name:nome, mime:"application/pdf", data:await lerDataURL(f), size:f.size};
+    }
+    if(!/^image\//.test(f.type) && !/\.(jpe?g|png|heic|heif|webp)$/i.test(nome)) throw new Error("Use uma foto ou um PDF.");
+    const img=await carregarImagem(f);
+    for(const [max,q] of [[1600,.72],[1280,.6],[1000,.5],[800,.45]]){
+      const esc=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+      const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*esc); c.height=Math.round(img.naturalHeight*esc);
+      const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height);
+      const data=c.toDataURL("image/jpeg",q);
+      const size=Math.round((data.length-23)*3/4);
+      if(size<=LIMITE) return {name:nome.replace(/\.[^.]+$/,"")+".jpg", mime:"image/jpeg", data, size};
+    }
+    throw new Error("A imagem ficou grande demais. Tente um print da tela.");
+  }
+  async function verAnexoSalvo(id,tipo,nomeDesp){
+    toast("Abrindo anexo…");
+    try{
+      const d=await db.collection("anexos").doc(id+"_"+tipo).get();
+      if(!d.exists){ toast("Anexo não encontrado"); return; }
+      const x=d.data()||{};
+      mostrarAnexo(TIPO_NOME[tipo]+(nomeDesp?" · "+nomeDesp:""), String(x.data||""), String(x.mime||""));
+    }catch(e){ toast("Não deu para abrir. Confira a internet."); }
+  }
+  let vUrl=null;
+  async function mostrarAnexo(titulo,data,mime){
+    if(!/^data:(image\/(jpeg|png|webp|gif)|application\/pdf);base64,/.test(data)){ toast("Anexo inválido"); return; }
+    if(vUrl){ URL.revokeObjectURL(vUrl); vUrl=null; }
+    try{ vUrl=URL.createObjectURL(await (await fetch(data)).blob()); }catch(e){}
+    $("#vTitle").textContent=titulo;
+    const body=$("#vBody"); body.replaceChildren();
+    if(mime==="application/pdf"){
+      const p=document.createElement("div"); p.style.cssText="color:#ddd;text-align:center;margin-top:40px;font-size:15px";
+      p.textContent="É um PDF. Toque em \"Abrir\" para ver."; body.append(p);
+    } else { const img=document.createElement("img"); img.src=data; img.alt=titulo; body.append(img); }
+    $("#viewer").classList.add("open");
+  }
+  $("#vClose").addEventListener("click",()=>$("#viewer").classList.remove("open"));
+  $("#vOpen").addEventListener("click",()=>{ if(vUrl) window.open(vUrl,"_blank"); });
 
   // ---------- excluir ----------
   let confAction=null;
@@ -452,7 +615,7 @@
   $("#confOk").addEventListener("click",async()=>{ const fn=confAction; confAction=null; close(); if(fn){ try{ await fn(); }catch(e){ handleWriteErr(e); } } });
   $("#btnDel").addEventListener("click",()=>{
     const e=expenses.find(x=>x.id===editId); if(!e) return;
-    confirmDel("Excluir despesa?",`"${e.name}" — ${fmt(e.value|0)}`,async()=>{ await db.collection("despesas").doc(e.id).delete(); toast("Despesa excluída"); });
+    confirmDel("Excluir despesa?",`"${e.name}" — ${fmt(e.value|0)}`,async()=>{ await db.collection("despesas").doc(e.id).delete(); toast("Despesa excluída"); db.collection("anexos").doc(e.id+"_nota").delete().catch(()=>{}); db.collection("anexos").doc(e.id+"_comp").delete().catch(()=>{}); });
   });
   let attachFor=null;
   $("#reembList").addEventListener("click",ev=>{
@@ -596,7 +759,8 @@
       value:Math.max(0,Math.round(Number(x.value)||0)),
       payer:validPerson(x.payer)?x.payer:"marcio",
       due:/^\d{4}-\d{2}-\d{2}$/.test(x.due||"")?x.due:"",
-      paid:!!x.paid, paidAt:x.paidAt||"", createdAt:Number(x.createdAt)||0
+      paid:!!x.paid, paidAt:x.paidAt||"", createdAt:Number(x.createdAt)||0,
+      temNota:!!x.temNota, temComp:!!x.temComp
     };
   }
   function cleanR(d){
@@ -609,21 +773,23 @@
   function start(){
     if(started) return; started=true;
     const timer=setTimeout(()=>{ banner("Os dados ainda não chegaram. Confira a internet."); setStatus(false,"sem sinal"); },12000);
-    const ok=()=>{ clearTimeout(timer); banner(""); setStatus(true,"ao vivo"); };
+    const hora=()=>new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    const ok=()=>{ clearTimeout(timer); banner(""); setStatus(true,"ao vivo · "+hora()); };
     const fail=(err)=>{ clearTimeout(timer); loadedExp=loadedReemb=true; setStatus(false,"erro"); banner(err&&err.code==="permission-denied"?"O banco de dados recusou o acesso às despesas. Avise o Claude para liberar.":"Conexão perdida. Feche e abra o app de novo."); render(); };
     db.collection("despesas").onSnapshot({includeMetadataChanges:true},snap=>{
       expenses=snap.docs.filter(d=>d.exists).map(clean); loadedExp=true;
-      if(!snap.metadata.fromCache) ok();
+      if(!snap.metadata.fromCache) ok(); else setStatus(false,"atualizando…");
       render();
     },fail);
     db.collection("reembolsos").onSnapshot({includeMetadataChanges:true},snap=>{
-      reembs=snap.docs.filter(d=>d.exists).map(cleanR); loadedReemb=true; render();
+      reembs=snap.docs.filter(d=>d.exists).map(cleanR); loadedReemb=true;
+      if(!snap.metadata.fromCache) ok();
+      render();
     },fail);
   }
   try{
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
-    try{ db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
     const auth = firebase.auth();
     auth.onAuthStateChanged(u=>{
       if(u){ start(); return; }
