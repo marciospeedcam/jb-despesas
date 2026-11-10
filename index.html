@@ -257,7 +257,27 @@
     messagingSenderId: "815638515657",
     appId: "1:815638515657:web:7679d52ade0d5576752218"
   };
-  if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+  // Versão nova do app: busca sem cache e recarrega sozinho quando chegar atualização
+  let swReg=null;
+  if('serviceWorker' in navigator){
+    const tinhaControle=!!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ swReg=r; r.update().catch(()=>{}); }).catch(()=>{});
+    let recarregou=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(tinhaControle && !recarregou){ recarregou=true; location.reload(); } });
+  }
+  // Ao voltar para o app depois de um tempo, recarrega tudo (dados e versão) para nunca mostrar coisa velha
+  let escondidoEm=0;
+  function voltou(){
+    if(document.hidden) return;
+    if(swReg) swReg.update().catch(()=>{});
+    if(escondidoEm && Date.now()-escondidoEm>15000){ location.reload(); return; }
+    escondidoEm=0;
+    try{ if(db) db.disableNetwork().then(()=>db.enableNetwork()).catch(()=>{}); }catch(e){}
+  }
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) escondidoEm=Date.now(); else voltou(); });
+  window.addEventListener('pageshow',ev=>{ if(ev.persisted) location.reload(); });
+  window.addEventListener('focus',voltou);
+  window.addEventListener('online',()=>{ try{ if(db) db.enableNetwork().catch(()=>{}); }catch(e){} });
   const NAMES = {marcio:"Márcio", matheus:"Mateus"};
   const OTHER = {marcio:"matheus", matheus:"marcio"};
   const PIX = {marcio:"11990174551", matheus:"32406965848"};
@@ -661,21 +681,23 @@
   function start(){
     if(started) return; started=true;
     const timer=setTimeout(()=>{ banner("Os dados ainda não chegaram. Confira a internet."); setStatus(false,"sem sinal"); },12000);
-    const ok=()=>{ clearTimeout(timer); banner(""); setStatus(true,"ao vivo"); };
+    const hora=()=>new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    const ok=()=>{ clearTimeout(timer); banner(""); setStatus(true,"ao vivo · "+hora()); };
     const fail=(err)=>{ clearTimeout(timer); loadedExp=loadedReemb=true; setStatus(false,"erro"); banner(err&&err.code==="permission-denied"?"O banco de dados recusou o acesso às despesas. Avise o Claude para liberar.":"Conexão perdida. Feche e abra o app de novo."); render(); };
     db.collection("despesas").onSnapshot({includeMetadataChanges:true},snap=>{
       expenses=snap.docs.filter(d=>d.exists).map(clean); loadedExp=true;
-      if(!snap.metadata.fromCache) ok();
+      if(!snap.metadata.fromCache) ok(); else setStatus(false,"atualizando…");
       render();
     },fail);
     db.collection("reembolsos").onSnapshot({includeMetadataChanges:true},snap=>{
-      reembs=snap.docs.filter(d=>d.exists).map(cleanR); loadedReemb=true; render();
+      reembs=snap.docs.filter(d=>d.exists).map(cleanR); loadedReemb=true;
+      if(!snap.metadata.fromCache) ok();
+      render();
     },fail);
   }
   try{
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
-    try{ db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
     const auth = firebase.auth();
     auth.onAuthStateChanged(u=>{
       if(u){ start(); return; }
