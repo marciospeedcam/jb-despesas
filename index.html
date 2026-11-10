@@ -263,15 +263,15 @@
     const tinhaControle=!!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ swReg=r; r.update().catch(()=>{}); }).catch(()=>{});
     let recarregou=false;
-    navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(tinhaControle && !recarregou){ recarregou=true; location.reload(); } });
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(tinhaControle && !recarregou && !openSheet){ recarregou=true; location.reload(); } });
   }
   // Ao voltar para o app depois de um tempo, recarrega tudo (dados e versão) para nunca mostrar coisa velha
   let escondidoEm=0;
   function voltou(){
     if(document.hidden) return;
     if(swReg) swReg.update().catch(()=>{});
-    if(escondidoEm && Date.now()-escondidoEm>15000){ location.reload(); return; }
-    escondidoEm=0;
+    const longe = escondidoEm && Date.now()-escondidoEm>15000; escondidoEm=0;
+    if(longe && !openSheet && !$("#viewer").classList.contains("open")){ location.reload(); return; }
     try{ if(db) db.disableNetwork().then(()=>db.enableNetwork()).catch(()=>{}); }catch(e){}
   }
   document.addEventListener('visibilitychange',()=>{ if(document.hidden) escondidoEm=Date.now(); else voltou(); });
