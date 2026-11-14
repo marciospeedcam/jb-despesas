@@ -1,5 +1,5 @@
 // JB Despesas - service worker: sempre busca a versão nova na internet; usa a cópia só se estiver sem sinal
-const CACHE = 'jbd-v9';
+const CACHE = 'jbd-v10';
 const ARQS = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'icon-180.png', 'favicon-32.png'];
 
 self.addEventListener('install', e => {
