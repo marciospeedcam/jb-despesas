@@ -102,6 +102,10 @@
   .seg button.on.m{border-color:var(--m);background:var(--m-soft)}
   .seg button.on.t{border-color:var(--t);background:var(--t-soft)}
   .toggle{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:12px;border-radius:12px;background:#1f1f1f;font-weight:600;font-size:15px;cursor:pointer}
+  input[type=date]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%;min-height:50px;text-align:left}
+  input[type=date]::-webkit-date-and-time-value{text-align:left}
+  .seg button.on.g{border-color:var(--gold);background:rgba(212,175,55,.15);color:var(--gold2)}
+  .chip.parc{background:rgba(212,175,55,.15);color:var(--gold2);font-weight:700}
   .split-prev{margin-top:12px;font-size:14px;color:var(--muted);background:#1f1f1f;border-radius:12px;padding:10px 12px}
   .split-prev b{color:var(--ink)}
   .actions{display:flex;gap:8px;margin-top:18px}
@@ -211,9 +215,20 @@
       <button type="button" class="m" data-p="marcio"><span class="av m">M</span>Márcio</button>
       <button type="button" class="t" data-p="matheus"><span class="av t">M</span>Mateus</button>
     </div>
-    <label class="f" for="fDue">Data de vencimento (opcional)</label>
+    <div id="formaBox">
+      <label class="f">Forma de pagamento</label>
+      <div class="seg" id="segForma">
+        <button type="button" class="g on" data-p="vista">À vista</button>
+        <button type="button" class="g" data-p="parc">Parcelado</button>
+      </div>
+      <div id="parcBox" style="display:none">
+        <label class="f" for="fParc">Número de parcelas</label>
+        <input id="fParc" inputmode="numeric" placeholder="Ex.: 3" maxlength="2">
+      </div>
+    </div>
+    <label class="f" for="fDue" id="lblDue">Data de vencimento (opcional)</label>
     <input type="date" id="fDue">
-    <div class="toggle" id="togPaid"><span>Já foi paga</span><span class="check" id="chkPaid"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span></div>
+    <div class="toggle" id="togPaid"><span id="txtPaid">Já foi paga</span><span class="check" id="chkPaid"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span></div>
     <label class="f">Nota da despesa (foto ou PDF)</label>
     <div class="anx" id="anxNota"></div>
     <label class="f">Comprovante de pagamento (foto ou PDF)</label>
@@ -459,6 +474,7 @@
             ${e.desc?`<div class="desc">${esc(e.desc)}</div>`:""}
             <div class="row2">
               <span class="chip ${pc}">${e.paid?"Pago por":"Paga"} ${NAMES[e.payer]}</span>
+              ${e.parcela?`<span class="chip parc">Parcela ${e.parcela.n}/${e.parcela.de}</span>`:""}
               <span class="chip">${fmt(Math.round((e.value|0)/2))} cada</span>
               ${dueChip}
               ${e.temNota?'<button class="chip anx-chip" data-act="ver" data-tipo="nota">📄 Nota</button>':""}
@@ -487,7 +503,11 @@
   document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",close));
 
   // ---------- form despesa ----------
-  let editId=null, fPayer="marcio", fPaid=false, saving=false;
+  let editId=null, fPayer="marcio", fPaid=false, saving=false, fForma="vista";
+  function addMesesISO(iso,k){ const [y,m,d]=iso.split("-").map(Number); let mm=m-1+k, yy=y+Math.floor(mm/12); mm=((mm%12)+12)%12; const ult=new Date(yy,mm+1,0).getDate(); return yy+"-"+String(mm+1).padStart(2,"0")+"-"+String(Math.min(d,ult)).padStart(2,"0"); }
+  function nParc(){ const n=parseInt(($("#fParc").value||"").replace(/\D/g,""),10); return isFinite(n)?n:0; }
+  function dividir(v,n){ const base=Math.floor(v/n), r=v-base*n; return Array.from({length:n},(_,i)=>base+(i===0?r:0)); }
+  function setForma(f){ fForma=f; setSeg("#segForma",f); const p=f==="parc"; $("#parcBox").style.display=p?"block":"none"; $("#lblDue").textContent=p?"Vencimento da 1ª parcela":"Data de vencimento (opcional)"; $("#txtPaid").textContent=p?"1ª parcela já foi paga":"Já foi paga"; updPrev(); }
   function setSeg(sel,val){ document.querySelectorAll(sel+" button").forEach(b=>b.classList.toggle("on",b.dataset.p===val)); }
   function updPrev(){
     const c=parseMoney($("#fVal").value);
@@ -495,6 +515,15 @@
     const half = ok?c/2:0;
     let t = `Cada um paga <b>${fmt(Math.round(half))}</b>`;
     if(ok) t += ` · ${NAMES[OTHER[fPayer]]} deve ${fmt(Math.round(half))} ao ${NAMES[fPayer]}${fPaid?"":" quando for paga"}`;
+    if(!editId && fForma==="parc"){
+      const n=nParc(), d=$("#fDue").value;
+      if(ok && n>=2 && n<=36){
+        const vs=dividir(c,n);
+        t = `<b>${n}x de ${fmt(vs[n-1])}</b>${vs[0]!==vs[n-1]?` (1ª de ${fmt(vs[0])})`:""} · cada um paga <b>${fmt(Math.round(vs[n-1]/2))}</b> por parcela`;
+        if(d){ const ds=Array.from({length:Math.min(n,4)},(_,i)=>fmtDate(addMesesISO(d,i))); t += `<br>Vencimentos: ${ds.join(", ")}${n>4?" …":""}`; }
+        else t += `<br>Escolha a data da 1ª parcela.`;
+      } else t = `Coloque o valor total e o número de parcelas (2 a 36).`;
+    }
     $("#splitPrev").innerHTML=t;
   }
   function openExp(e){
@@ -507,6 +536,7 @@
     fPayer = e?e.payer:"marcio"; fPaid = e?!!e.paid:false;
     setSeg("#segPayer",fPayer); $("#chkPaid").classList.toggle("on",fPaid);
     $("#btnDel").style.display = e?"inline-block":"none";
+    $("#formaBox").style.display = e?"none":"block"; $("#fParc").value=""; setForma("vista");
     anx.nota = {state: e&&e.temNota?"existing":"none"};
     anx.comp = {state: e&&e.temComp?"existing":"none"};
     renderAnx("nota"); renderAnx("comp");
@@ -516,6 +546,8 @@
   $("#segPayer").addEventListener("click",ev=>{const b=ev.target.closest("button"); if(!b)return; fPayer=b.dataset.p; setSeg("#segPayer",fPayer); updPrev();});
   $("#togPaid").addEventListener("click",()=>{fPaid=!fPaid; $("#chkPaid").classList.toggle("on",fPaid); updPrev();});
   $("#fVal").addEventListener("input",updPrev);
+  $("#segForma").addEventListener("click",ev=>{const b=ev.target.closest("button"); if(!b)return; setForma(b.dataset.p);});
+  $("#fParc").addEventListener("input",updPrev); $("#fDue").addEventListener("change",updPrev);
   $("#fab").addEventListener("click",()=>openExp(null));
 
   $("#formExp").addEventListener("submit",async ev=>{
@@ -525,6 +557,13 @@
     if(!name){ $("#errExp").textContent="Coloque o nome da despesa."; return; }
     if(!isFinite(value)||value<=0){ $("#errExp").textContent="Coloque um valor válido."; return; }
     if(!db){ $("#errExp").textContent="Sem conexão com o banco de dados."; return; }
+    const parcelado = !editId && fForma==="parc";
+    if(parcelado){
+      const n=nParc();
+      if(n<2||n>36){ $("#errExp").textContent="Coloque o número de parcelas (2 a 36)."; return; }
+      if(!due){ $("#errExp").textContent="Escolha a data de vencimento da 1ª parcela."; return; }
+      if(value<n){ $("#errExp").textContent="Valor muito baixo para parcelar."; return; }
+    }
     saving=true; $("#btnSave").disabled=true;
     const temAnexoNovo = anx.nota.state==="new" || anx.comp.state==="new";
     if(temAnexoNovo) $("#btnSave").textContent="Enviando anexo…";
@@ -540,8 +579,18 @@
       const temComp = anx.comp.state==="new"||anx.comp.state==="existing";
       if(editId){
         const prev=expenses.find(x=>x.id===editId)||{};
-        await db.collection("despesas").doc(editId).set({name,desc,value,payer:fPayer,due,paid:fPaid,paidAt:fPaid?(prev.paidAt||today()):"",createdAt:prev.createdAt||Date.now(),updatedAt:Date.now(),temNota,temComp});
+        const extra = prev.parcela ? {parcela:prev.parcela} : {};
+        await db.collection("despesas").doc(editId).set({name,desc,value,payer:fPayer,due,paid:fPaid,paidAt:fPaid?(prev.paidAt||today()):"",createdAt:prev.createdAt||Date.now(),updatedAt:Date.now(),temNota,temComp,...extra});
         toast("Despesa atualizada");
+      } else if(parcelado){
+        const n=nParc(), vs=dividir(value,n), now=Date.now(), batch=db.batch();
+        for(let i=0;i<n;i++){
+          const ref = i===0 ? db.collection("despesas").doc(id) : db.collection("despesas").doc();
+          const p1 = i===0;
+          batch.set(ref,{name,desc,value:vs[i],payer:fPayer,due:addMesesISO(due,i),paid:p1&&fPaid,paidAt:(p1&&fPaid)?today():"",createdAt:now+i,updatedAt:now,temNota:p1&&temNota,temComp:p1&&temComp,parcela:{n:i+1,de:n,grupo:id,total:value}});
+        }
+        await batch.commit();
+        toast(`${n} parcelas lançadas`);
       } else {
         await db.collection("despesas").doc(id).set({name,desc,value,payer:fPayer,due,paid:fPaid,paidAt:fPaid?today():"",createdAt:Date.now(),updatedAt:Date.now(),temNota,temComp});
         toast("Despesa lançada");
@@ -814,7 +863,8 @@
       payer:validPerson(x.payer)?x.payer:"marcio",
       due:/^\d{4}-\d{2}-\d{2}$/.test(x.due||"")?x.due:"",
       paid:!!x.paid, paidAt:/^\d{4}-\d{2}-\d{2}$/.test(x.paidAt||"")?x.paidAt:"", mes:/^\d{4}-\d{2}$/.test(x.mes||"")?x.mes:"", createdAt:Number(x.createdAt)||0,
-      temNota:!!x.temNota, temComp:!!x.temComp
+      temNota:!!x.temNota, temComp:!!x.temComp,
+      parcela:(x.parcela&&Number(x.parcela.n)>0&&Number(x.parcela.de)>1)?{n:Math.round(Number(x.parcela.n)),de:Math.round(Number(x.parcela.de)),grupo:String(x.parcela.grupo||""),total:Number(x.parcela.total)||0}:null
     };
   }
   function cleanR(d){
