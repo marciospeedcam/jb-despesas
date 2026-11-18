@@ -356,7 +356,7 @@
 
   let db=null, canWrite=true;
   let expenses=[], reembs=[];
-  let filter="pend";
+  let filter="pend"; let __carryBase="";
   const curMonth = () => today().slice(0,7);
   let selMonth = curMonth();
   const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
@@ -430,6 +430,7 @@
     $("#saldoLbl").textContent = fc ? "Saldo no fechamento de "+nomeMes(selMonth).split(" ")[0] : "Saldo entre vocês";
     const cdeb = carry>0?"Mateus":"Márcio", ccred = carry>0?"Márcio":"Mateus";
     $("#carry").innerHTML = (Math.abs(carry)<1 ? "Mês anterior: <b>zerado ✓</b>" : `Acumulado do mês anterior: <b>${cdeb} devia ${fmt(Math.abs(carry))} ao ${ccred}</b>`);
+    __carryBase = $("#carry").innerHTML;
     $("#pagoM").textContent=fmt(contrib.marcio);
     $("#pagoT").textContent=fmt(contrib.matheus);
     $("#reembM").textContent=reembLine("marcio",reembPaid);
@@ -439,9 +440,15 @@
     const ready = loadedExp && loadedReemb;
     { const pv={marcio:0,matheus:0}; let pc=0;
       if(!fc){ expenses.forEach(e=>{ if(!e.paid&&mesDesp(e)===selMonth){ pv[e.payer]+=e.value|0; pc++; } }); }
-      const tp=pv.marcio+pv.matheus;
-      const linha=k=> (fc||fut) ? "" : `📅 A pagar no mês: <b>${fmt(pv[k])}</b><br>Parte dele na previsão: <b>${fmt(Math.round(tp/2))}</b>`;
-      $("#prevM").innerHTML=linha("marcio"); $("#prevT").innerHTML=linha("matheus"); }
+      // total geral: tudo que cada um pagou ou vai pagar (inclui parcelas futuras), menos/mais reembolsos
+      const tg={marcio:0,matheus:0}; let totAll=0, falta=0;
+      expenses.forEach(e=>{ tg[e.payer]+=e.value|0; totAll+=e.value|0; if(!e.paid) falta+=e.value|0; });
+      reembs.forEach(r=>{ tg[r.from]+=r.value|0; tg[OTHER[r.from]]-=r.value|0; });
+      const linha=k=> (fc||fut) ? "" : `📅 A pagar no mês: <b>${fmt(pv[k])}</b><br>🧾 Total geral (pago + a pagar): <b>${fmt(tg[k])}</b>`;
+      $("#prevM").innerHTML=linha("marcio"); $("#prevT").innerHTML=linha("matheus");
+      window.__proj = (fc||fut||falta<=0) ? "" : (()=>{ const d=Math.round((tg.marcio-tg.matheus)/2); const deb=d>0?"Mateus":"Márcio", cre=d>0?"Márcio":"Mateus";
+        return `<br>Contando também o que falta pagar (${fmt(falta)}): ` + (Math.abs(d)<1 ? "<b>fica zerado</b>" : `<b>${deb} ficaria devendo ${fmt(Math.abs(d))} ao ${cre}</b>`); })(); }
+    if(!fut) $("#carry").innerHTML = __carryBase + (window.__proj||"");
     document.querySelectorAll(".pcard .n").forEach((n,i)=>{ n.lastChild.textContent=(i?"Mateus":"Márcio")+(fut?" vai pagar":" pagou"); });
     if(fut){
       const pend=expenses.filter(e=>!e.paid&&mesDesp(e)===selMonth), tot=pend.reduce((a,e)=>a+(e.value|0),0);
