@@ -37,7 +37,7 @@
   .monthbar .mt{text-align:center;flex:1}
   .monthbar #mNome{font-weight:800;font-size:17px;color:#fff;text-transform:capitalize}
   .mest{font-size:12px;margin-top:2px;font-weight:600}
-  .mest.ab{color:#86efac} .mest.fc{color:var(--gold2)}
+  .mest.ab{color:#86efac} .mest.fu{color:#93c5fd} .mest.fc{color:var(--gold2)}
   .carry{margin-top:8px;font-size:13px;color:var(--muted);border-top:1px dashed #333;padding-top:8px}
   .carry b{color:var(--gold2)}
   .saldo{background:var(--card);border:1px solid rgba(212,175,55,.35);border-radius:var(--radius);padding:16px}
@@ -361,11 +361,17 @@
   const addMes = (m,d) => { let [y,mm]=m.split("-").map(Number); mm+=d; while(mm<1){mm+=12;y--;} while(mm>12){mm-=12;y++;} return y+"-"+String(mm).padStart(2,"0"); };
   const isoDe = ts => { if(!ts) return today(); const d=new Date(ts); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
   const clampMes = m => { const c=curMonth(); return (!/^\d{4}-\d{2}$/.test(m)||m>c)?c:m; };
-  function mesDesp(e){ if(!e.paid) return curMonth(); return clampMes(e.mes||(e.paidAt||isoDe(e.createdAt)).slice(0,7)); }
+  function mesDesp(e){
+    const c=curMonth();
+    if(!e.paid){ const m=(e.due||"").slice(0,7); return (/^\d{4}-\d{2}$/.test(m)&&m>c) ? m : c; }
+    return clampMes(e.mes||(e.paidAt||isoDe(e.createdAt)).slice(0,7));
+  }
+  const futuro = m => m > curMonth();
+  function ultimoMes(){ let m=addMes(curMonth(),1); for(const e of expenses){ const x=mesDesp(e); if(x>m) m=x; } return m; }
   function mesReemb(r){ return clampMes(r.mes||(r.date||isoDe(r.createdAt)).slice(0,7)); }
   const fechado = m => m < curMonth();
   const editavel = () => canWrite && !fechado(selMonth);
-  function primeiroMes(){ let m=curMonth(); for(const e of expenses){ const x=mesDesp(e); if(x<m) m=x; } for(const r of reembs){ const x=mesReemb(r); if(x<m) m=x; } return m; }
+  function primeiroMes(){ let m=addMes(curMonth(),-1); for(const e of expenses){ const x=mesDesp(e); if(x<m) m=x; } for(const r of reembs){ const x=mesReemb(r); if(x<m) m=x; } return m; }
   let loadedExp=false, loadedReemb=false;
 
   function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
@@ -412,12 +418,12 @@
   // ---------- render ----------
   function render(){
     const {total,net,reembPaid,contrib,carry} = compute();
-    const fc=fechado(selMonth), ed=editavel(), first=primeiroMes();
+    const fc=fechado(selMonth), fut=futuro(selMonth), ed=editavel(), first=primeiroMes(), last=ultimoMes();
     $("#mNome").textContent=nomeMes(selMonth);
-    $("#mEst").textContent=fc?"🔒 Mês fechado":"Mês aberto";
-    $("#mEst").className="mest "+(fc?"fc":"ab");
+    $("#mEst").textContent=fc?"🔒 Mês fechado":fut?"📅 Mês futuro (previsão)":"Mês aberto";
+    $("#mEst").className="mest "+(fc?"fc":fut?"fu":"ab");
     $("#mPrev").disabled = selMonth<=first;
-    $("#mNext").disabled = selMonth>=curMonth();
+    $("#mNext").disabled = selMonth>=last;
     $("#saldoLbl").textContent = fc ? "Saldo no fechamento de "+nomeMes(selMonth).split(" ")[0] : "Saldo entre vocês";
     const cdeb = carry>0?"Mateus":"Márcio", ccred = carry>0?"Márcio":"Mateus";
     $("#carry").innerHTML = (Math.abs(carry)<1 ? "Mês anterior: <b>zerado ✓</b>" : `Acumulado do mês anterior: <b>${cdeb} devia ${fmt(Math.abs(carry))} ao ${ccred}</b>`);
@@ -428,7 +434,20 @@
     $("#parteM").textContent="parte dele: "+fmt(Math.round(total/2));
     $("#parteT").textContent="parte dele: "+fmt(Math.round(total/2));
     const ready = loadedExp && loadedReemb;
-    if(!ready){ $("#saldoTxt").textContent="Carregando…"; }
+    document.querySelectorAll(".pcard .n").forEach((n,i)=>{ n.lastChild.textContent=(i?"Mateus":"Márcio")+(fut?" vai pagar":" pagou"); });
+    if(fut){
+      const pend=expenses.filter(e=>!e.paid&&mesDesp(e)===selMonth), tot=pend.reduce((a,e)=>a+(e.value|0),0);
+      const vp={marcio:0,matheus:0}; pend.forEach(e=>vp[e.payer]+=e.value|0);
+      $("#pagoM").textContent=fmt(vp.marcio); $("#pagoT").textContent=fmt(vp.matheus);
+      $("#reembM").textContent=""; $("#reembT").textContent="";
+      $("#parteM").textContent="parte dele: "+fmt(Math.round(tot/2)); $("#parteT").textContent="parte dele: "+fmt(Math.round(tot/2));
+      $("#saldoLbl").textContent="Previsto para "+nomeMes(selMonth).split(" ")[0];
+      $("#saldoBig").textContent=fmt(tot);
+      $("#saldoTxt").textContent=pend.length?`${pend.length} conta${pend.length>1?"s":""} a pagar · ${fmt(Math.round(tot/2))} para cada um`:"Nenhuma conta prevista neste mês";
+      $("#btnReemb").style.display="none"; $("#pixPay").style.display="none";
+      $("#carry").innerHTML = Math.abs(carry)<1 ? "Saldo atual entre vocês: <b>zerado ✓</b>" : `Saldo atual entre vocês: <b>${cdeb} deve ${fmt(Math.abs(carry))} ao ${ccred}</b>`;
+    }
+    else if(!ready){ $("#saldoTxt").textContent="Carregando…"; }
     else if(Math.abs(net)<1){
       $("#saldoBig").textContent="R$ 0,00"; $("#saldoTxt").textContent=fc?"Fechou zerado ✓":"Tudo acertado entre vocês ✓"; $("#btnReemb").style.display="none"; $("#pixPay").style.display="none";
     } else {
@@ -837,7 +856,7 @@
 
   // ---------- meses ----------
   $("#mPrev").addEventListener("click",()=>{ if(selMonth>primeiroMes()){ selMonth=addMes(selMonth,-1); render(); } });
-  $("#mNext").addEventListener("click",()=>{ if(selMonth<curMonth()){ selMonth=addMes(selMonth,1); render(); } });
+  $("#mNext").addEventListener("click",()=>{ if(selMonth<ultimoMes()){ selMonth=addMes(selMonth,1); render(); } });
   let _mesVisto=curMonth();
   setInterval(()=>{ const c=curMonth(); if(c!==_mesVisto){ if(selMonth===_mesVisto) selMonth=c; _mesVisto=c; render(); } },60000);
 
