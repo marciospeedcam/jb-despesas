@@ -31,6 +31,9 @@
   .status-dot{font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:6px}
   .status-dot i{width:8px;height:8px;border-radius:50%;background:#64748b;display:inline-block}
   .status-dot.ok i{background:#22c55e}
+  .pcard .prev{margin-top:6px;padding-top:6px;border-top:1px dashed #333;font-size:12px;color:#93c5fd}
+  .pcard .prev b{color:#fff}
+  .pcard .prev:empty{display:none}
   .monthbar{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px}
   .monthbar button{width:44px;height:40px;border:0;border-radius:10px;background:#262626;color:var(--gold2);font-size:24px;font-weight:700;cursor:pointer;line-height:1}
   .monthbar button:disabled{opacity:.25;cursor:default}
@@ -168,8 +171,8 @@
       <button class="btn light" id="btnReemb" style="display:none">Registrar reembolso</button>
     </div>
     <div class="grid2">
-      <div class="pcard"><div class="n"><span class="av m">M</span>Márcio pagou</div><div class="v" id="pagoM">R$ 0,00</div><div class="s" id="parteM">parte dele: R$ 0,00</div><div class="r" id="reembM"></div></div>
-      <div class="pcard"><div class="n"><span class="av t">M</span>Mateus pagou</div><div class="v" id="pagoT">R$ 0,00</div><div class="s" id="parteT">parte dele: R$ 0,00</div><div class="r" id="reembT"></div></div>
+      <div class="pcard"><div class="n"><span class="av m">M</span>Márcio pagou</div><div class="v" id="pagoM">R$ 0,00</div><div class="s" id="parteM">parte dele: R$ 0,00</div><div class="r" id="reembM"></div><div class="prev" id="prevM"></div></div>
+      <div class="pcard"><div class="n"><span class="av t">M</span>Mateus pagou</div><div class="v" id="pagoT">R$ 0,00</div><div class="s" id="parteT">parte dele: R$ 0,00</div><div class="r" id="reembT"></div><div class="prev" id="prevT"></div></div>
     </div>
   </div>
 </header>
@@ -434,6 +437,11 @@
     $("#parteM").textContent="parte dele: "+fmt(Math.round(total/2));
     $("#parteT").textContent="parte dele: "+fmt(Math.round(total/2));
     const ready = loadedExp && loadedReemb;
+    { const pv={marcio:0,matheus:0}; let pc=0;
+      if(!fc){ expenses.forEach(e=>{ if(!e.paid&&mesDesp(e)===selMonth){ pv[e.payer]+=e.value|0; pc++; } }); }
+      const tp=pv.marcio+pv.matheus;
+      const linha=k=> (fc||fut) ? "" : `📅 A pagar no mês: <b>${fmt(pv[k])}</b><br>Parte dele na previsão: <b>${fmt(Math.round(tp/2))}</b>`;
+      $("#prevM").innerHTML=linha("marcio"); $("#prevT").innerHTML=linha("matheus"); }
     document.querySelectorAll(".pcard .n").forEach((n,i)=>{ n.lastChild.textContent=(i?"Mateus":"Márcio")+(fut?" vai pagar":" pagou"); });
     if(fut){
       const pend=expenses.filter(e=>!e.paid&&mesDesp(e)===selMonth), tot=pend.reduce((a,e)=>a+(e.value|0),0);
